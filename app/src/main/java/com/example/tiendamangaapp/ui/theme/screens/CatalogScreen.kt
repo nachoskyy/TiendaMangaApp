@@ -17,6 +17,7 @@ import androidx.compose.ui.layout.ContentScale
 import com.example.tiendamangaapp.core.ServiceLocator
 import com.example.tiendamangaapp.data.local.CartItem
 import com.example.tiendamangaapp.data.local.Manga
+import com.example.tiendamangaapp.data.remote.MangaApi
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -25,6 +26,7 @@ import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import com.example.tiendamangaapp.data.remote.MangaApiService
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,10 +46,15 @@ fun CatalogScreen(
     val haptics = LocalHapticFeedback.current
     val animatedCount by animateIntAsState(cartCount, label = "cartCount")
 
+    var apiMessage by remember { mutableStateOf<String?>(null) }
+
     LaunchedEffect(Unit) {
         try {
             mangas = mangaDao.getAll()
             cartCount = cartDao.getAll().sumOf { it.cantidad }
+            val apiResult = MangaApi.service.getMangas()
+            val firstTitle = apiResult.data.firstOrNull()?.title ?: "Sin Resultados"
+            apiMessage = "Ejemplo API: primer manga desde Jikan -> $firstTitle"
         } catch (t: Throwable) {
             error = t.message ?: t::class.java.simpleName
         }
@@ -72,6 +79,15 @@ fun CatalogScreen(
                 Text("Cargando catálogo…")
             }
             else -> {
+                apiMessage?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
                 LazyColumn(
                     contentPadding = padding,
                     verticalArrangement = Arrangement.spacedBy(12.dp),
