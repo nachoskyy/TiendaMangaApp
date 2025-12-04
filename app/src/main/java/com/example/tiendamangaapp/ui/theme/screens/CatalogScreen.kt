@@ -20,13 +20,16 @@ import com.example.tiendamangaapp.data.local.Manga
 import com.example.tiendamangaapp.data.remote.MangaApi
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import com.example.tiendamangaapp.data.remote.MangaApiService
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,11 +45,11 @@ fun CatalogScreen(
     var cartCount by remember { mutableStateOf(0) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    var apiMessage by remember { mutableStateOf<String?>(null) }
 
     val haptics = LocalHapticFeedback.current
     val animatedCount by animateIntAsState(cartCount, label = "cartCount")
 
-    var apiMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         try {
@@ -55,8 +58,12 @@ fun CatalogScreen(
             val apiResult = MangaApi.service.getMangas()
             val firstTitle = apiResult.data.firstOrNull()?.title ?: "Sin Resultados"
             apiMessage = "Ejemplo API: primer manga desde Jikan -> $firstTitle"
+            println(">>> API DEBUG: $apiResult")
         } catch (t: Throwable) {
             error = t.message ?: t::class.java.simpleName
+            apiMessage = "Error al llamar API: ${t.message}"
+
+            println(">>> API ERROR: ${t.message}")
         }
     }
 
@@ -72,64 +79,92 @@ fun CatalogScreen(
         }
     ) { padding ->
         when {
-            error != null -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+            error != null -> Box(
+                Modifier.fillMaxSize().padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
                 Text("Error al cargar catálogo:\n$error")
             }
-            mangas.isEmpty() -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+
+            mangas.isEmpty() -> Box(
+                Modifier.fillMaxSize().padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
                 Text("Cargando catálogo…")
             }
+
             else -> {
-                apiMessage?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
-                }
-                LazyColumn(
-                    contentPadding = padding,
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.padding(16.dp)
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .padding(16.dp)
                 ) {
-                    items(mangas) { m ->
-                        AnimatedVisibility(visible = true, enter = fadeIn(), exit = fadeOut()) {
-                            ElevatedCard(
-                                onClick = { onViewDetail(m.id) }
-                            ) {
-                                Column(Modifier.padding(12.dp)) {
-                                    AsyncImage(
-                                        model = ImageRequest.Builder(LocalContext.current)
-                                            .data(m.portadaUrl)
-                                            .crossfade(true)
-                                            .build(),
-                                        contentDescription = "Portada de ${m.titulo}",
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(180.dp)
-                                            .clip(RoundedCornerShape(12.dp))
-                                    )
-                                    Spacer(Modifier.height(10.dp))
-                                    Text(m.titulo, style = MaterialTheme.typography.titleMedium)
-                                    Text("${m.autor} · ${m.genero}", style = MaterialTheme.typography.bodySmall)
-                                    Text("Precio: $${m.precio} · Stock: ${m.stock}", style = MaterialTheme.typography.bodySmall)
-                                    Spacer(Modifier.height(8.dp))
-                                    Row {
-                                        OutlinedButton(onClick = { onViewDetail(m.id) }) {
-                                            Text("Ver detalle")
-                                        }
-                                        Spacer(Modifier.width(8.dp))
-                                        Button(onClick = {
-                                            scope.launch {
-                                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                val exists = cartDao.findByManga(m.id)
-                                                if (exists == null) cartDao.insert(CartItem(mangaId = m.id, cantidad = 1))
-                                                else cartDao.addDelta(m.id, 1)
-                                                cartCount = cartDao.getAll().sumOf { it.cantidad }
+
+                    apiMessage?.let { msg ->
+                        Text(
+                            text = msg,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp)
+                        )
+                    }
+
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(mangas) { m ->
+                            AnimatedVisibility(visible = true, enter = fadeIn(), exit = fadeOut()) {
+                                ElevatedCard(
+                                    onClick = { onViewDetail(m.id) }
+                                ) {
+                                    Column(Modifier.padding(12.dp)) {
+                                        AsyncImage(
+                                            model = ImageRequest.Builder(LocalContext.current)
+                                                .data(m.portadaUrl)
+                                                .crossfade(true)
+                                                .build(),
+                                            contentDescription = "Portada de ${m.titulo}",
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(180.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                        )
+                                        Spacer(Modifier.height(10.dp))
+                                        Text(m.titulo, style = MaterialTheme.typography.titleMedium)
+                                        Text(
+                                            "${m.autor} · ${m.genero}",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                        Text(
+                                            "Precio: $${m.precio} · Stock: ${m.stock}",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                        Spacer(Modifier.height(8.dp))
+                                        Row {
+                                            OutlinedButton(onClick = { onViewDetail(m.id) }) {
+                                                Text("Ver detalle")
                                             }
-                                        }) { Text("Agregar") }
+                                            Spacer(Modifier.width(8.dp))
+                                            Button(onClick = {
+                                                scope.launch {
+                                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    val exists = cartDao.findByManga(m.id)
+                                                    if (exists == null) cartDao.insert(
+                                                        CartItem(
+                                                            mangaId = m.id,
+                                                            cantidad = 1
+                                                        )
+                                                    )
+                                                    else cartDao.addDelta(m.id, 1)
+                                                    cartCount =
+                                                        cartDao.getAll().sumOf { it.cantidad }
+                                                }
+                                            }) { Text("Agregar") }
+                                        }
                                     }
                                 }
                             }
